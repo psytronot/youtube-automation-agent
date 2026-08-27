@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 
 const express = require('express');
 const path = require('path');
@@ -56,8 +56,8 @@ class YouTubeAutomationAgent {
 
   async initialize() {
     try {
-      console.log(chalk.cyan.bold(`\n🎬 YouTube Automation Agent v${version}`));
-      console.log(chalk.gray('─'.repeat(50)));
+      console.log(chalk.cyan.bold(`\nðŸŽ¬ YouTube Automation Agent v${version}`));
+      console.log(chalk.gray('â”€'.repeat(50)));
       
       // Initialize database
       this.logger.info('Initializing database...');
@@ -91,7 +91,7 @@ class YouTubeAutomationAgent {
       this.readiness = new ProductionReadinessService(this.db, this.credentials);
       
       if (!credentialsValid) {
-        console.log(chalk.yellow('\n⚠️  Some credentials are missing or invalid.'));
+        console.log(chalk.yellow('\nâš ï¸  Some credentials are missing or invalid.'));
         console.log(chalk.yellow('Run: npm run credentials:setup'));
         this.setupRequired = true;
         this.setupAPI();
@@ -168,7 +168,7 @@ class YouTubeAutomationAgent {
     // Initialize each agent
     for (const [name, agent] of Object.entries(this.agents)) {
       await agent.initialize();
-      this.logger.info(`✓ ${name} agent initialized`);
+      this.logger.info(`âœ“ ${name} agent initialized`);
     }
   }
 
@@ -190,18 +190,18 @@ class YouTubeAutomationAgent {
 
     const capabilities = [
       { name: 'Script & strategy generation', ok: hasText, hint: 'configure an AI provider (npm run credentials:setup)' },
-      { name: 'Image generation (visuals/thumbnails)', ok: hasImages, hint: 'requires an OpenAI or Gemini API key — otherwise gradient slides are used' },
-      { name: 'Voice narration (TTS)', ok: hasTTS, hint: 'configure OpenAI, Gemini, ElevenLabs, or Azure Speech — otherwise videos are silent' },
+      { name: 'Image generation (visuals/thumbnails)', ok: hasImages, hint: 'requires an OpenAI or Gemini API key â€” otherwise gradient slides are used' },
+      { name: 'Voice narration (TTS)', ok: hasTTS, hint: 'configure OpenAI, Gemini, ElevenLabs, or Azure Speech â€” otherwise videos are silent' },
       { name: 'Video assembly (FFmpeg)', ok: hasFFmpeg, hint: ffmpegInstallHint() },
       { name: 'YouTube upload', ok: hasUpload, hint: 'run: npm run credentials:setup' }
     ];
 
-    console.log(chalk.cyan('\n🔎 Capability check:'));
+    console.log(chalk.cyan('\nðŸ”Ž Capability check:'));
     for (const cap of capabilities) {
       if (cap.ok) {
-        console.log(chalk.green(`  ✓ ${cap.name}`));
+        console.log(chalk.green(`  âœ“ ${cap.name}`));
       } else {
-        console.log(chalk.yellow(`  ✗ ${cap.name} — ${cap.hint}`));
+        console.log(chalk.yellow(`  âœ— ${cap.name} â€” ${cap.hint}`));
       }
     }
 
@@ -1408,7 +1408,8 @@ class YouTubeAutomationAgent {
 
   async generateContent(topic = null, style = null, length = 'medium', options = {}) {
     this.logger.info('Starting content generation pipeline...');
-    const { jobId = null, strategyContext = {} } = options;
+    const { jobId = null, strategyContext: rawStrategyContext } = options;
+const strategyContext = rawStrategyContext || {};
     const profile = await this.db.getChannelProfile() || {};
     const lengthLabels = { short: '2-4 minutes', medium: '8-12 minutes', long: '15-20 minutes' };
 
@@ -1793,23 +1794,23 @@ class YouTubeAutomationAgent {
     const initialized = await this.initialize();
     
     if (!initialized) {
-      console.log(chalk.red('\n❌ Failed to initialize. Please check your configuration.'));
+      console.log(chalk.red('\nâŒ Failed to initialize. Please check your configuration.'));
       process.exit(1);
     }
     
     const PORT = process.env.PORT || 3456;
     this.app.listen(PORT, () => {
-      console.log(chalk.green(`\n✅ YouTube Automation Agent running on port ${PORT}`));
-      console.log(chalk.gray('─'.repeat(50)));
-      console.log(chalk.white('📊 Dashboard: ') + chalk.cyan(`http://localhost:${PORT}`));
-      console.log(chalk.white('🔧 API Health: ') + chalk.cyan(`http://localhost:${PORT}/health`));
-      console.log(chalk.white('📅 Schedule: ') + chalk.cyan(`http://localhost:${PORT}/schedule`));
-      console.log(chalk.white('📈 Analytics: ') + chalk.cyan(`http://localhost:${PORT}/analytics`));
-      console.log(chalk.gray('─'.repeat(50)));
+      console.log(chalk.green(`\nâœ… YouTube Automation Agent running on port ${PORT}`));
+      console.log(chalk.gray('â”€'.repeat(50)));
+      console.log(chalk.white('ðŸ“Š Dashboard: ') + chalk.cyan(`http://localhost:${PORT}`));
+      console.log(chalk.white('ðŸ”§ API Health: ') + chalk.cyan(`http://localhost:${PORT}/health`));
+      console.log(chalk.white('ðŸ“… Schedule: ') + chalk.cyan(`http://localhost:${PORT}/schedule`));
+      console.log(chalk.white('ðŸ“ˆ Analytics: ') + chalk.cyan(`http://localhost:${PORT}/analytics`));
+      console.log(chalk.gray('â”€'.repeat(50)));
       if (this.setupRequired) {
-        console.log(chalk.yellow('\n⚙️  Setup is required. The dashboard is available; run npm run walkthrough to enable generation.'));
+        console.log(chalk.yellow('\nâš™ï¸  Setup is required. The dashboard is available; run npm run walkthrough to enable generation.'));
       } else {
-        console.log(chalk.yellow('\n🤖 Automation is active. Approved content will be published on schedule.'));
+        console.log(chalk.yellow('\nðŸ¤– Automation is active. Approved content will be published on schedule.'));
       }
     });
   }
@@ -1825,3 +1826,8 @@ if (require.main === module) {
 }
 
 module.exports = { YouTubeAutomationAgent };
+
+
+
+
+
