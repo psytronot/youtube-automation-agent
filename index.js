@@ -4,6 +4,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs').promises;
 const { Logger } = require('./utils/logger');
+const { AgentOrchestrator } = require('./utils/agent-orchestrator');
 const { Database } = require('./database/db');
 const { CredentialManager } = require('./utils/credential-manager');
 const { ContentStrategyAgent } = require('./agents/content-strategy-agent');
@@ -33,6 +34,10 @@ const chalk = require('chalk');
 class YouTubeAutomationAgent {
   constructor() {
     this.logger = new Logger('MainAgent');
+    this.orchestrator = new AgentOrchestrator({
+      logger: this.logger,
+      concurrency: Math.max(1, parseInt(process.env.AGENT_CONCURRENCY || process.env.MAX_CONCURRENT_JOBS || '2', 10))
+    });
     this.db = null;
     this.credentials = null;
     this.agents = {};
@@ -79,7 +84,8 @@ class YouTubeAutomationAgent {
         startGenerationJob: input => this.startGenerationJob(input),
         resumeGenerationJob: (jobId, options) => this.resumeGenerationJob(jobId, options),
         waitForGenerationJob: jobId => this.waitForGenerationJob(jobId),
-        notify: notification => this.operator.notify(notification)
+        notify: notification => this.operator.notify(notification),
+        orchestrator: this.orchestrator
       });
       this.activation = new ActivationMetrics(this.db);
       this.telemetry = new AnonymousTelemetry(this.db, this.logger);
@@ -1239,7 +1245,7 @@ class YouTubeAutomationAgent {
     if (['scheduler', 'autonomous_operator'].includes(input.source)) {
       await this.readiness?.assertReady('Automated generation');
     }
-    const maxConcurrent = Math.max(1, parseInt(process.env.MAX_CONCURRENT_JOBS || '1', 10));
+    const maxConcurrent = Math.max(1, parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10));
     if (this.activeJobs.size >= maxConcurrent) {
       const error = new Error(`Generation is busy (${this.activeJobs.size}/${maxConcurrent} active jobs). Try again when the current job finishes.`);
       error.status = 429;
@@ -1449,23 +1455,27 @@ const strategyContext = rawStrategyContext || {};
     );
     this.logger.info(`Script generated: ${script.title}`);
 
-    // Step 3: Thumbnail Design
-    const thumbnail = await this.runGenerationStage(
-      jobId,
-      'thumbnail',
-      40,
-      () => this.agents.thumbnailDesigner.generateThumbnail(script)
-    );
-    this.logger.info('Thumbnail generated');
-
-    // Step 4: SEO Optimization
-    const seoData = await this.runGenerationStage(
-      jobId,
-      'seo',
-      52,
-      () => this.agents.seoOptimizer.optimize(script, strategy)
-    );
-    this.logger.info('SEO optimization complete');
+    // Steps 3-4: independent packaging agents run in parallel.
+    // They both depend on the script, but neither depends on the other.
+    const packaging = await this.orchestrator.runParallel({
+      thumbnail: () => this.runGenerationStage(
+        jobId,
+        'thumbnail',
+        40,
+        () => this.agents.thumbnailDesigner.generateThumbnail(script)
+      ),
+      seo: () => this.runGenerationStage(
+        jobId,
+        'seo',
+        52,
+        () => this.agents.seoOptimizer.optimize(script, strategy)
+      )
+    }, {
+      concurrency: 2,
+      failFast: true
+    });
+    const { thumbnail, seo: seoData } = packaging;
+    this.logger.info('Thumbnail and SEO packaging completed in parallel');
 
     // Step 5: Production Management
     const productionData = await this.runGenerationStage(
