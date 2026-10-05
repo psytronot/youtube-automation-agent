@@ -8,6 +8,7 @@ class AutonomousChannelOperator {
     this.resumeGenerationJob = options.resumeGenerationJob;
     this.waitForGenerationJob = options.waitForGenerationJob;
     this.notify = options.notify || (async () => null);
+    this.orchestrator = options.orchestrator || null;
     this.logger = new Logger('AutonomousOperator');
     this.activeRuns = new Map();
   }
@@ -91,11 +92,11 @@ class AutonomousChannelOperator {
       await this.assertNotCancelled(runId);
       await this.update(runId, { stage: 'planning', progress: 20, research, plan });
 
-      for (let index = 0; index < plan.length; index++) {
+      const runItem = async (item, index) => {
         await this.assertNotCancelled(runId);
-        const item = plan[index];
         let record = generatedJobs[index];
-        if (record?.status === 'completed') continue;
+        if (record?.status === 'completed') return record;
+
         let ideaId = record?.ideaId;
         if (!record) {
           const idea = await this.db.createContentIdea({
@@ -111,6 +112,7 @@ class AutonomousChannelOperator {
         } else if (ideaId) {
           await this.db.updateContentIdea(ideaId, { status: 'generating' });
         }
+
         const progress = 20 + Math.round((index / plan.length) * 70);
         await this.update(runId, {
           stage: `producing_${index + 1}_of_${plan.length}`,
@@ -119,7 +121,6 @@ class AutonomousChannelOperator {
         });
 
         try {
-          await this.update(runId, { generatedJobs });
           await this.assertNotCancelled(runId);
           let job = record.jobId ? await this.db.getGenerationJob(record.jobId) : null;
           if (job && ['failed', 'interrupted'].includes(job.status)) {
@@ -143,27 +144,52 @@ class AutonomousChannelOperator {
               }
             });
           }
+
           record.jobId = job.id;
           record.status = 'running';
           await this.update(runId, { generatedJobs });
-          const completed = job.status === 'completed' ? job : await this.waitForGenerationJob(job.id);
-          record.status = completed.status;
-          record.productionId = completed.production_id || null;
-          record.reviewStatus = completed.details?.reviewStatus || null;
-          record.error = completed.error || null;
-          if (ideaId) await this.db.updateContentIdea(ideaId, {
-            status: completed.status === 'completed' ? 'generated' : 'failed'
-          });
+
+          const completedJob = job.status === 'completed'
+            ? job
+            : await this.waitForGenerationJob(job.id);
+          record.status = completedJob.status;
+          record.productionId = completedJob.production_id || null;
+          record.reviewStatus = completedJob.details?.reviewStatus || null;
+          record.error = completedJob.error || null;
+
+          if (ideaId) {
+            await this.db.updateContentIdea(ideaId, {
+              status: completedJob.status === 'completed' ? 'generated' : 'failed'
+            });
+          }
         } catch (error) {
           record.status = error.code === 'OPERATOR_CANCELLED' ? 'cancelled' : 'failed';
           record.error = error.message;
           if (ideaId) await this.db.updateContentIdea(ideaId, { status: 'failed' });
           if (error.code === 'OPERATOR_CANCELLED') throw error;
         }
+
         await this.update(runId, {
           progress: 20 + Math.round(((index + 1) / plan.length) * 70),
           generatedJobs
         });
+        return record;
+      };
+
+      const operatorConcurrency = Math.max(
+        1,
+        Math.min(
+          Number(process.env.AUTONOMOUS_CONCURRENCY || process.env.MAX_CONCURRENT_JOBS || 2),
+          plan.length
+        )
+      );
+
+      if (this.orchestrator) {
+        await this.orchestrator.runPool(plan, runItem, { concurrency: operatorConcurrency });
+      } else {
+        for (let index = 0; index < plan.length; index++) {
+          await runItem(plan[index], index);
+        }
       }
 
       const completed = generatedJobs.filter(job => job.status === 'completed');

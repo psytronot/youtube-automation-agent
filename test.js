@@ -50,6 +50,7 @@ class SystemTest {
       { name: 'Walkthrough Module', test: () => this.testWalkthroughModule() },
       { name: 'Logger System', test: () => this.testLogger() },
       { name: 'Directory Structure', test: () => this.testDirectories() },
+      { name: 'Multi-Agent Orchestrator', test: () => this.testMultiAgentOrchestrator() },
       { name: 'Agent Loading', test: () => this.testAgentLoading() },
       { name: 'Configuration Files', test: () => this.testConfiguration() },
       { name: 'Audience Comment Store', test: () => this.testAudienceCommentStore() },
@@ -3206,6 +3207,73 @@ class SystemTest {
       await db.close();
     }
   }
+
+  async testMultiAgentOrchestrator() {
+    const { AgentOrchestrator } = require('./utils/agent-orchestrator');
+    const orchestrator = new AgentOrchestrator({ concurrency: 2 });
+
+    const started = [];
+    const finished = [];
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    const parallelStartedAt = Date.now();
+    const result = await orchestrator.runParallel({
+      thumbnail: async () => {
+        started.push('thumbnail');
+        await sleep(80);
+        finished.push('thumbnail');
+        return 'thumbnail-result';
+      },
+      seo: async () => {
+        started.push('seo');
+        await sleep(80);
+        finished.push('seo');
+        return 'seo-result';
+      }
+    }, { concurrency: 2 });
+
+    const elapsed = Date.now() - parallelStartedAt;
+    if (result.thumbnail !== 'thumbnail-result' || result.seo !== 'seo-result') {
+      throw new Error('Parallel agent results were not preserved');
+    }
+    if (started.length !== 2 || finished.length !== 2) {
+      throw new Error('Both independent agents must execute exactly once');
+    }
+    if (elapsed >= 150) {
+      throw new Error(`Independent agents were not parallelized efficiently (elapsed ${elapsed}ms)`);
+    }
+
+    let active = 0;
+    let maxActive = 0;
+    const poolResults = await orchestrator.runPool(
+      [1, 2, 3, 4, 5],
+      async value => {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        await sleep(20);
+        active--;
+        return value * 2;
+      },
+      { concurrency: 2 }
+    );
+
+    if (maxActive > 2) throw new Error('Agent pool exceeded its concurrency limit');
+    if (poolResults.join(',') !== '2,4,6,8,10') {
+      throw new Error('Agent pool returned results out of input order');
+    }
+
+    let failed = false;
+    try {
+      await orchestrator.runParallel({
+        good: async () => 'ok',
+        bad: async () => { throw new Error('expected failure'); }
+      }, { concurrency: 2 });
+    } catch (error) {
+      failed = error.code === 'AGENT_ORCHESTRATION_FAILED' && error.causes?.bad;
+    }
+    if (!failed) throw new Error('Parallel orchestration must surface named task failures');
+  }
+
 
   async testEngagementAIProviderWiring() {
     const { AITextService } = require('./utils/ai-text-service');
