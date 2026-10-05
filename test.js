@@ -50,6 +50,7 @@ class SystemTest {
       { name: 'Walkthrough Module', test: () => this.testWalkthroughModule() },
       { name: 'Logger System', test: () => this.testLogger() },
       { name: 'Directory Structure', test: () => this.testDirectories() },
+      { name: 'Multi-Agent Orchestrator', test: () => this.testMultiAgentOrchestrator() },
       { name: 'Agent Loading', test: () => this.testAgentLoading() },
       { name: 'Configuration Files', test: () => this.testConfiguration() },
       { name: 'Audience Comment Store', test: () => this.testAudienceCommentStore() },
